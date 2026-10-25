@@ -29,32 +29,18 @@
       of replay data in the same format as above.
     </p>
     <p>
-      Get a decoded replay as JSON: <code>https://tldb.haelp.dev/replay/&lt;id&gt;</code>. Prefer
-      decoding locally when downloading many replays.
+      Get a decoded replay as JSON: <code>https://tldb.haelp.dev/replay/&lt;id&gt;</code>.
+      Prefer decoding locally when downloading many replays.
     </p>
     <h3>Replay data format</h3>
     <p>
-      Replays are stored in the compact TLR format (files start with the bytes <code>TLR</code>).
-      Decode them with
-      <a href="https://github.com/haelp/tl-db/blob/main/src/common/codec.ts">codec.ts</a>
-      (<code>decodeReplay(bytes)</code>, runs on Bun or Node 22.15+), which needs the zstd
-      dictionary at <code>https://tldb.haelp.dev/codec/dict-v1.bin</code> saved next to it as
-      <code>codec-dict-v1.bin</code>. The format is described in
-      <a href="https://github.com/haelp/tl-db/blob/main/FORMAT.md">FORMAT.md</a>.
+      Replays are stored in a custom TLR format. The decoder/encoder is available at
+      <a href="https://github.com/halp1/tl-db/blob/main/src/common/codec.ts">codec.ts</a>
+      (function: <code>decodeReplay(bytes)</code>). <br />
+      <br />
+      Note the zstd dictionary at
+      <code>https://tldb.haelp.dev/codec/dict-v1.bin</code> must be saved next to it as
+      <code>codec-dict-v1.bin</code>.
     </p>
-    <p>
-      Older replays that have not been converted yet start with byte <code>0xd4</code> and are
-      plain <a href="https://github.com/kriszyp/msgpackr">msgpackr</a> data, which
-      <code>decodeReplay</code> also handles. They were packed with:
-    </p>
-    <pre>
-const packer = new Packr({
-  bundleStrings: true,
-  useRecords: true,
-  structuredClone: true,
-  useFloat32: 3,
-  moreTypes: false,
-});
-    </pre>
   </body>
 </html>

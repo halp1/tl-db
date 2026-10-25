@@ -1,5 +1,4 @@
-// please keep comements at a very minimum (short and only when necessary)
-// format spec: see FORMAT.md
+
 import { Packr } from "msgpackr";
 import zlib from "node:zlib";
 import { readFileSync } from "node:fs";
