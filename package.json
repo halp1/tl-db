@@ -1,0 +1,25 @@
+{
+  "name": "tl-db",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "scrape": "bun run src/scraper/index.ts",
+		"serve": "bun run src/server/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxfmt": "^0.74.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1155.0",
+    "@haelp/teto": "^4.2.7",
+    "msgpackr": "^2.1.2"
+  },
+  "imports": {
+    "#common/*": "./src/common/*.ts"
+  }
+}

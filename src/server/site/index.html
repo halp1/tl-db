@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tl-db</title>
+  </head>
+  <body>
+    <h1>tl-db</h1>
+    <strong>Please be respectful of the server.</strong>
+    <p>Download a replay: <code>https://r2.tldb.haelp.dev/&lt;id&gt;</code></p>
+    <p>
+      List replays for a user: <code>https://tldb.haelp.dev/users/&lt;id&gt;</code>.
+      Returns a JSON array of replay data in the following format:
+    </p>
+    <pre>
+[
+  {
+    "id": "&lt;id&gt;",
+    "p1_uid": "&lt;p1_uid&gt;",
+    "p2_uid": "&lt;p2_uid&gt;",
+    "timestamp": &lt;timestamp&gt;
+  }
+]
+      </pre
+    >
+    <p>
+      List all replays: <code>https://tldb.haelp.dev/replays</code>. Returns a JSON array
+      of replay data in the same format as above.
+    </p>
+    <p>
+      Get a decoded replay as JSON: <code>https://tldb.haelp.dev/replay/&lt;id&gt;</code>. Prefer
+      decoding locally when downloading many replays.
+    </p>
+    <h3>Replay data format</h3>
+    <p>
+      Replays are stored in the compact TLR format (files start with the bytes <code>TLR</code>).
+      Decode them with
+      <a href="https://github.com/haelp/tl-db/blob/main/src/common/codec.ts">codec.ts</a>
+      (<code>decodeReplay(bytes)</code>, runs on Bun or Node 22.15+), which needs the zstd
+      dictionary at <code>https://tldb.haelp.dev/codec/dict-v1.bin</code> saved next to it as
+      <code>codec-dict-v1.bin</code>. The format is described in
+      <a href="https://github.com/haelp/tl-db/blob/main/FORMAT.md">FORMAT.md</a>.
+    </p>
+    <p>
+      Older replays that have not been converted yet start with byte <code>0xd4</code> and are
+      plain <a href="https://github.com/kriszyp/msgpackr">msgpackr</a> data, which
+      <code>decodeReplay</code> also handles. They were packed with:
+    </p>
+    <pre>
+const packer = new Packr({
+  bundleStrings: true,
+  useRecords: true,
+  structuredClone: true,
+  useFloat32: 3,
+  moreTypes: false,
+});
+    </pre>
+  </body>
+</html>
