@@ -9,7 +9,7 @@ import { encodeReplay, setCompressorPoolSize, TLR_MIME } from "#common/codec";
 // each level-22 dict compressor keeps ~340MB resident, the default pool of 4 got the scraper OOM-killed
 setCompressorPoolSize(1);
 
-const DRY_RUN = true;
+const DRY_RUN = false;
 
 const logger = new Logger("");
 
@@ -102,9 +102,7 @@ const uploadIndividual = async (
   cache: Set<string>,
   { id, replay }: { id: string; replay: Replay },
 ) => {
-	console.time("encode");
   const { data, format, error } = await encodeReplay(replay);
-	console.timeEnd("encode");
   if (error) logger.warn(`v1 encode failed for ${id}, stored as v0: ${error}`);
   if (DRY_RUN) return;
   await upload(id, data, TLR_MIME);
