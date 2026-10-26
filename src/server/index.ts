@@ -57,6 +57,7 @@ const server = Bun.serve({
   },
 
   port: env.PORT,
+  development: process.env.NODE_ENV === "development",
 });
 
 console.log(`live at http://localhost:${env.PORT}`);
