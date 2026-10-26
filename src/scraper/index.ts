@@ -4,9 +4,12 @@ import { API, Logger } from "@haelp/teto/utils";
 import { env } from "#common/env";
 import { statements } from "../common/db";
 import { upload } from "#common/s3";
-import { encodeReplay, TLR_MIME } from "#common/codec";
+import { encodeReplay, setCompressorPoolSize, TLR_MIME } from "#common/codec";
 
-const DRY_RUN = false;
+// each level-22 dict compressor keeps ~340MB resident, the default pool of 4 got the scraper OOM-killed
+setCompressorPoolSize(1);
+
+const DRY_RUN = true;
 
 const logger = new Logger("");
 
@@ -99,7 +102,9 @@ const uploadIndividual = async (
   cache: Set<string>,
   { id, replay }: { id: string; replay: Replay },
 ) => {
+	console.time("encode");
   const { data, format, error } = await encodeReplay(replay);
+	console.timeEnd("encode");
   if (error) logger.warn(`v1 encode failed for ${id}, stored as v0: ${error}`);
   if (DRY_RUN) return;
   await upload(id, data, TLR_MIME);
