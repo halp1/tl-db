@@ -1,17 +1,23 @@
-const env_keys = ['S3_ACCOUNT_ID', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET_NAME', 'S3_ENDPOINT', 'TETRIO_TOKEN', 'PORT'] as const;
+const envKeys = [
+  "S3_ACCOUNT_ID",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+  "S3_BUCKET_NAME",
+  "S3_ENDPOINT",
+  "TETRIO_TOKEN",
+  "PORT",
+] as const;
 
-export type Env = Record<typeof env_keys[number], string>;
+const optionalEnvKeys = ["INGEST_URL", "INGEST_TOKEN", "SCRAPE_COMPRESSORS"] as const;
 
-const buildEnv = (keys: typeof env_keys): Env => {
-	const env: Env = {} as Env;
-	for (const key of keys) {
-		const v = process.env[key];
-		if (!v) {
-			throw new Error(`Missing env var ${key}`);
-		}
-		env[key] = v;
-	}
+export type Env = Record<(typeof envKeys)[number], string>;
+export type OptionalEnv = Partial<Record<(typeof optionalEnvKeys)[number], string>>;
 
-	return env;
-}
-export const env: Env = buildEnv(env_keys);
+const missing = envKeys.filter((key) => !process.env[key]);
+if (missing.length > 0) throw new Error(`Missing env vars: ${missing.join(", ")}`);
+
+export const env = Object.fromEntries(envKeys.map((key) => [key, process.env[key]!])) as Env;
+
+export const optionalEnv: OptionalEnv = Object.fromEntries(
+  optionalEnvKeys.flatMap((key) => (process.env[key] ? [[key, process.env[key]]] : [])),
+);

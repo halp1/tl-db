@@ -1,13 +1,13 @@
 import { ch } from "@haelp/teto/ch";
 import type { Replay } from "@haelp/teto/types";
 import { API, Logger } from "@haelp/teto/utils";
-import { env } from "#common/env";
-import { statements } from "../common/db";
+import { env, optionalEnv } from "#common/env";
 import { upload } from "#common/s3";
 import { encodeReplay, setCompressorPoolSize, TLR_MIME } from "#common/codec";
+import { openStore, type Store } from "./store";
 
-// each level-22 dict compressor keeps ~340MB resident, the default pool of 4 got the scraper OOM-killed
-setCompressorPoolSize(1);
+// each level-22 dict compressor keeps ~340MB resident, 4 of them got the scraper OOM-killed on the vps
+setCompressorPoolSize(Number(optionalEnv.SCRAPE_COMPRESSORS ?? "1"));
 
 const DRY_RUN = false;
 
@@ -24,11 +24,11 @@ export const download = async (client: API, id: string) => {
   return replay.replay as Replay;
 };
 
-const load = async (cache: Set<string>, userid: string) => {
+const load = async (store: Store, cache: Set<string>, userid: string) => {
   if (!userid) throw new Error("User not found");
 
   const m = await matches(userid);
-  const toDownload = m.filter((id) => !cache.has(id) && !statements.getReplay.get(id));
+  const toDownload = m.filter((id) => !cache.has(id) && !store.has(id));
 
   return toDownload;
 
@@ -59,7 +59,7 @@ const load = async (cache: Set<string>, userid: string) => {
   // }
 };
 
-async function* scrape(cache: Set<string>, minTR: number) {
+async function* scrape(store: Store, cache: Set<string>, minTR: number) {
   let last: ch.Types.LeaderboardEntry | undefined;
 
   let downloaded = 0;
@@ -81,7 +81,7 @@ async function* scrape(cache: Set<string>, minTR: number) {
 
     let i = 0;
     for (const user of set) {
-      for (const replay of await load(cache, user._id)) {
+      for (const replay of await load(store, cache, user._id)) {
         yield replay;
       }
       i++;
@@ -99,6 +99,7 @@ async function* scrape(cache: Set<string>, minTR: number) {
 }
 
 const uploadIndividual = async (
+  store: Store,
   cache: Set<string>,
   { id, replay }: { id: string; replay: Replay },
 ) => {
@@ -107,14 +108,14 @@ const uploadIndividual = async (
   if (DRY_RUN) return;
   await upload(id, data, TLR_MIME);
 
-  statements.insertReplay.run(
+  await store.insert({
     id,
-    replay.users[0]?.id!,
-    replay.users[1]?.id!,
-    new Date(replay.ts).getTime(),
+    p1_uid: replay.users[0]?.id!,
+    p2_uid: replay.users[1]?.id!,
+    timestamp: new Date(replay.ts).getTime(),
     format,
-    data.length,
-  );
+    size: data.length,
+  });
 
   cache.add(id);
 };
@@ -126,8 +127,11 @@ const uploadAll = async (minTR: number, concurrency = 1) => {
       "Mozilla/5.0 (Linux; Android 9; AFTGAZL Build/PS7607.3166N; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/102.0.5005.125 Mobile Safari/537.36 FE v1.79.1",
   });
 
+  const store = await openStore();
+  logger.info(`storing rows in ${store.mode}`);
+
   const cache = new Set<string>();
-  const iterator = scrape(cache, minTR)[Symbol.asyncIterator]();
+  const iterator = scrape(store, cache, minTR)[Symbol.asyncIterator]();
 
   const worker = async () => {
     while (true) {
@@ -155,7 +159,7 @@ const uploadAll = async (minTR: number, concurrency = 1) => {
           }
         } while (!replay);
 
-        await uploadIndividual(cache, { id: value, replay });
+        await uploadIndividual(store, cache, { id: value, replay });
       } catch (e) {
         console.error(e);
       }
