@@ -56,10 +56,15 @@ const remoteStore = async (url: string, token: string): Promise<Store> => {
 const localStore = async (): Promise<Store> => {
   const { statements } = await import("#common/db");
   const { applyRunUpdate } = await import("#common/ingest");
+  const { backupDb } = await import("#common/backup");
   return {
     mode: "local db",
     startRun: async () => statements.startRun.get(Date.now())!.id,
-    updateRun: async (id, update) => applyRunUpdate(statements, id, update),
+    updateRun: async (id, update) => {
+      applyRunUpdate(statements, id, update);
+      if (update.status !== "running")
+        await backupDb().catch((e) => console.error(`db backup failed: ${e}`));
+    },
     has: (id) => !!statements.getReplay.get(id),
     async insert(r) {
       statements.insertReplay.run(r.id, r.p1_uid, r.p2_uid, r.timestamp, r.format, r.size);

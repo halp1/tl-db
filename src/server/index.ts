@@ -4,6 +4,7 @@ import { env, optionalEnv } from "#common/env";
 import { applyRunUpdate, parseRows, parseRunUpdate } from "#common/ingest";
 import { decodeReplay } from "#common/codec";
 import { fetchObject } from "#common/s3";
+import { backupDb } from "#common/backup";
 import root from "./site/index.html";
 
 // lets a scraper on another machine add rows. disabled unless INGEST_TOKEN is set
@@ -79,6 +80,8 @@ const server = Bun.serve({
         const update = parseRunUpdate(await req.json().catch(() => null));
         if (!Number.isSafeInteger(id) || !update) return new Response("bad update", { status: 400 });
         applyRunUpdate(statements, id, update);
+        if (update.status !== "running")
+          backupDb().catch((e) => console.error(`db backup failed: ${e}`));
         return Response.json({ ok: true });
       },
     },
