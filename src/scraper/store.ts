@@ -1,10 +1,12 @@
 import { optionalEnv } from "#common/env";
-import type { IngestRow } from "#common/ingest";
+import type { IngestRow, RunUpdate } from "#common/ingest";
 
 export interface Store {
   mode: string;
   has(id: string): boolean;
   insert(row: IngestRow): Promise<void>;
+  startRun(): Promise<number>;
+  updateRun(id: number, update: RunUpdate): Promise<void>;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -18,8 +20,16 @@ const remoteStore = async (url: string, token: string): Promise<Store> => {
   if (!res.ok) throw new Error(`GET /ingest/ids failed: ${res.status} ${await res.text()}`);
   const known = new Set((await res.json()) as string[]);
 
+  const post = async (path: string, body: unknown) => {
+    const r = await fetch(`${base}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(`POST ${path} ${r.status} ${await r.text()}`);
+    return await r.json();
+  };
+
   return {
     mode: `remote (${base}, ${known.size} known)`,
+    startRun: async () => ((await post("/ingest/run", {})) as { id: number }).id,
+    updateRun: async (id, update) => void (await post(`/ingest/run/${id}`, update)),
     has: (id) => known.has(id),
     async insert(row) {
       for (let attempt = 1; ; attempt++) {
@@ -45,8 +55,11 @@ const remoteStore = async (url: string, token: string): Promise<Store> => {
 
 const localStore = async (): Promise<Store> => {
   const { statements } = await import("#common/db");
+  const { applyRunUpdate } = await import("#common/ingest");
   return {
     mode: "local db",
+    startRun: async () => statements.startRun.get(Date.now())!.id,
+    updateRun: async (id, update) => applyRunUpdate(statements, id, update),
     has: (id) => !!statements.getReplay.get(id),
     async insert(r) {
       statements.insertReplay.run(r.id, r.p1_uid, r.p2_uid, r.timestamp, r.format, r.size);

@@ -4,6 +4,7 @@ import { API, Logger } from "@haelp/teto/utils";
 import { env, optionalEnv } from "#common/env";
 import { upload } from "#common/s3";
 import { encodeReplay, setCompressorPoolSize, TLR_MIME } from "#common/codec";
+import type { RunUpdate } from "#common/ingest";
 import { openStore, type Store } from "./store";
 
 // each level-22 dict compressor keeps ~340MB resident, 4 of them got the scraper OOM-killed on the vps
@@ -98,6 +99,8 @@ async function* scrape(store: Store, cache: Set<string>, minTR: number) {
   }
 }
 
+let inserted = 0;
+
 const uploadIndividual = async (
   store: Store,
   cache: Set<string>,
@@ -118,17 +121,15 @@ const uploadIndividual = async (
   });
 
   cache.add(id);
+  inserted++;
 };
 
-const uploadAll = async (minTR: number, concurrency = 1) => {
+const uploadAll = async (store: Store, minTR: number, concurrency = 1) => {
   const client = new API({
     token: env.TETRIO_TOKEN,
     userAgent:
       "Mozilla/5.0 (Linux; Android 9; AFTGAZL Build/PS7607.3166N; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/102.0.5005.125 Mobile Safari/537.36 FE v1.79.1",
   });
-
-  const store = await openStore();
-  logger.info(`storing rows in ${store.mode}`);
 
   const cache = new Set<string>();
   const iterator = scrape(store, cache, minTR)[Symbol.asyncIterator]();
@@ -169,4 +170,30 @@ const uploadAll = async (minTR: number, concurrency = 1) => {
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
 };
 
-await uploadAll(18_000, 5);
+const store = await openStore();
+logger.info(`storing rows in ${store.mode}`);
+
+const runId = await store.startRun();
+const report = (update: RunUpdate) =>
+  store.updateRun(runId, update).catch((e) => logger.warn(`could not report run status: ${e}`));
+
+const heartbeat = setInterval(() => report({ status: "running", inserted }), 60_000);
+
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, async () => {
+    clearInterval(heartbeat);
+    await report({ status: "failed", inserted, error: `stopped by ${signal}` });
+    process.exit(1);
+  });
+}
+
+try {
+  await uploadAll(store, 18_000, 5);
+  clearInterval(heartbeat);
+  await report({ status: "ok", inserted });
+  logger.success(`scrape finished, ${inserted} new replays`);
+} catch (e) {
+  clearInterval(heartbeat);
+  await report({ status: "failed", inserted, error: String(e) });
+  throw e;
+}
