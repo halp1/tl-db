@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-type Status =
+type Status = { replays: number } & (
   | { status: "never" }
   | {
       status: "running" | "ok" | "failed";
@@ -8,9 +8,11 @@ type Status =
       finished_at: number | null;
       inserted: number;
       last_success_at: number | null;
-    };
+    }
+);
 
 const el = document.getElementById("scrape-status")!;
+const countEl = document.getElementById("replay-count")!;
 
 const when = (ms: number) =>
   new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -30,9 +32,12 @@ const refresh = async () => {
     const s = (await r.json()) as Status;
     el.textContent = render(s);
     el.dataset.status = s.status;
+    countEl.textContent = `tl-db is currently storing ${s.replays.toLocaleString()} replays.`;
+    countEl.hidden = false;
   } catch {
     el.textContent = "Scrape status unavailable";
     el.dataset.status = "unknown";
+    countEl.hidden = true;
   }
 };
 

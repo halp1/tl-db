@@ -22,14 +22,18 @@ const insertMany = db.transaction((rows: NonNullable<ReturnType<typeof parseRows
   for (const r of rows) statements.insertReplay.run(r.id, r.p1_uid, r.p2_uid, r.timestamp, r.format, r.size);
 });
 
+const replayCount = db.prepare<{ n: number }, []>(`SELECT COUNT(*) AS n FROM "replays"`);
+
 const RUN_STALE_MS = 10 * 60_000;
 
 const scrapeStatus = () => {
   statements.expireRuns.run(Date.now() - RUN_STALE_MS);
+  const replays = replayCount.get()!.n;
   const latest = statements.latestRun.get();
-  if (!latest) return { status: "never" as const };
+  if (!latest) return { status: "never" as const, replays };
   const lastSuccess = statements.latestSuccess.get();
   return {
+    replays,
     status: latest.status,
     started_at: latest.started_at,
     finished_at: latest.finished_at,
