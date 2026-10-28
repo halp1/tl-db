@@ -5,7 +5,6 @@ import { applyRunUpdate, parseRows, parseRunUpdate } from "#common/ingest";
 import { decodeReplay } from "#common/codec";
 import { fetchObject } from "#common/s3";
 import { backupDb } from "#common/backup";
-import root from "./site/index.html";
 
 // lets a scraper on another machine add rows. disabled unless INGEST_TOKEN is set
 const INGEST_TOKEN = optionalEnv.INGEST_TOKEN;
@@ -42,9 +41,49 @@ const scrapeStatus = () => {
   };
 };
 
+// the home page is rendered on the server so the stats are in the html on first paint.
+// times are relative because the server does not know the visitor's time zone
+const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const UNITS = [
+  ["day", 86_400_000],
+  ["hour", 3_600_000],
+  ["minute", 60_000],
+] as const;
+
+const ago = (ms: number) => {
+  const diff = ms - Date.now();
+  for (const [unit, size] of UNITS)
+    if (Math.abs(diff) >= size || unit === "minute") return rtf.format(Math.round(diff / size), unit);
+  return "";
+};
+
+const time = (ms: number) => `<time datetime="${new Date(ms).toISOString()}">${ago(ms)}</time>`;
+
+const statusText = (s: ReturnType<typeof scrapeStatus>) => {
+  if (s.status === "never") return "No scrapes yet";
+  if (s.status === "running")
+    return `Scrape in progress, started ${time(s.started_at)} (${s.inserted.toLocaleString("en-US")} new so far)`;
+  if (s.status === "ok") return `Last scraped ${time(s.finished_at!)}`;
+  const failed = `Last scrape failed ${time(s.finished_at ?? s.started_at)}`;
+  return s.last_success_at ? `${failed}. Last successful scrape ${time(s.last_success_at)}` : failed;
+};
+
+const homeTemplate = await Bun.file(new URL("./site/index.html", import.meta.url)).text();
+
+const home = () => {
+  const s = scrapeStatus();
+  const html = homeTemplate
+    .replace("{{status}}", statusText(s))
+    .replace("{{status_kind}}", s.status)
+    .replace("{{replays}}", s.replays.toLocaleString("en-US"));
+  return new Response(html, {
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" },
+  });
+};
+
 const server = Bun.serve({
   routes: {
-    "/": root,
+    "/": home,
     "/users/:user": (ctx) => {
       const user = ctx.params.user;
       const replays = statements.fromUser.all(user);

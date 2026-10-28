@@ -7,9 +7,8 @@
   </head>
   <body>
     <h1>tl-db</h1>
-    <p id="scrape-status" aria-live="polite"></p>
-    <p id="replay-count" hidden></p>
-    <script type="module" src="./status.ts"></script>
+    <p id="scrape-status" data-status="{{status_kind}}">{{status}}</p>
+    <p id="replay-count">tl-db is currently storing {{replays}} replays.</p>
     <strong>Please be respectful of the server.</strong>
     <p>Download a replay: <code>https://r2.tldb.haelp.dev/&lt;id&gt;</code></p>
     <p>
