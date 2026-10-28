@@ -14,8 +14,28 @@ const DRY_RUN = false;
 
 const logger = new Logger("");
 
+const RETRIES = 5;
+const RETRY_BASE_MS = 5_000;
+
+// tetr.io sometimes answers with an html error page instead of json. wait and try again
+// (5s, 10s, 20s, 40s, 80s) before giving up and throwing
+const withRetry = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (attempt >= RETRIES) throw e;
+      const wait = RETRY_BASE_MS * 2 ** attempt;
+      logger.warn(`${label} failed (${e}), retry ${attempt + 1}/${RETRIES} in ${wait / 1000}s`);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+};
+
 export const matches = async (uid: string) => {
-  const records = await ch.users.personalRecords(uid, "league", "recent");
+  const records = await withRetry(`records for ${uid}`, () =>
+    ch.users.personalRecords(uid, "league", "recent"),
+  );
   return records.filter((record) => !record.stub).map((record) => record.replayid);
 };
 
@@ -69,9 +89,8 @@ async function* scrape(store: Store, cache: Set<string>, minTR: number) {
     const after: string | undefined = last
       ? `${last.p.pri}:${last.p.sec}:${last.p.ter}`
       : undefined;
-    const raw = await ch.users.leaderboard(
-      "league",
-      after ? { after, limit: 100 } : { limit: 100 },
+    const raw = await withRetry(`leaderboard page after ${after ?? "start"}`, () =>
+      ch.users.leaderboard("league", after ? { after, limit: 100 } : { limit: 100 }),
     );
 
     const set: ch.Types.LeaderboardEntry[] = raw.filter(
@@ -82,9 +101,15 @@ async function* scrape(store: Store, cache: Set<string>, minTR: number) {
 
     let i = 0;
     for (const user of set) {
-      for (const replay of await load(store, cache, user._id)) {
-        yield replay;
+      let ids: string[] = [];
+      try {
+        ids = await load(store, cache, user._id);
+      } catch (e) {
+        // retries ran out for this player, skip them so the rest of the leaderboard still gets scraped
+        skipped++;
+        logger.error(`skipping ${user.username} (${user._id}) after ${RETRIES} retries: ${e}`);
       }
+      for (const replay of ids) yield replay;
       i++;
 
       logger.progress(`${i} / ${downloaded + 1} - ${downloaded + 1 + set.length}`, i / set.length);
@@ -100,6 +125,7 @@ async function* scrape(store: Store, cache: Set<string>, minTR: number) {
 }
 
 let inserted = 0;
+let skipped = 0;
 
 const uploadIndividual = async (
   store: Store,
@@ -191,7 +217,7 @@ try {
   await uploadAll(store, 18_000, 5);
   clearInterval(heartbeat);
   await report({ status: "ok", inserted });
-  logger.success(`scrape finished, ${inserted} new replays`);
+  logger.success(`scrape finished, ${inserted} new replays, ${skipped} players skipped`);
 } catch (e) {
   clearInterval(heartbeat);
   await report({ status: "failed", inserted, error: String(e) });
